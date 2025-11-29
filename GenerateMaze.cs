@@ -10,15 +10,15 @@ public class GenerateMaze : MonoBehaviour
     [SerializeField] private int numX = 10;
     [SerializeField] private int numY = 10;
 
-    private void Awake()
-    {
-        numX = MazeSettings.numX;
-        numY = MazeSettings.numY;
-    }
+    [Header("Start area (reuse roomPrefab)")]
+    [SerializeField] private int startAreaSize = 5;   
+    [SerializeField] private int startPathLength = 5;  
 
     private Room[,] rooms;
     private float roomWidth;
     private float roomHeight;
+
+    private List<Room> startPathRooms = new List<Room>();
 
     private class Edge
     {
@@ -29,10 +29,7 @@ public class GenerateMaze : MonoBehaviour
 
         public Edge(Vector2Int a, Vector2Int b, Room.Directions dir, float w)
         {
-            A = a;
-            B = b;
-            dirFromA = dir;
-            weight = w;
+            A = a; B = b; dirFromA = dir; weight = w;
         }
     }
 
@@ -70,17 +67,100 @@ public class GenerateMaze : MonoBehaviour
         public bool Connected(int a, int b) => Find(a) == Find(b);
     }
 
+    private void Awake()
+    {
+        numX = MazeSettings.numX;
+        numY = MazeSettings.numY;
+    }
+
     private void Start()
     {
+        GetRoomSize();
+        SpawnStartArea();
+        SpawnStartPath();
         InitializeRooms();
-        AddExitTrigger(); 
+        CreateMaze();
+        AddExitTrigger();
         SetCamera();
+        MovePlayerToStartCenter();
+    }
+    private void SpawnStartArea()
+    {
+        float originX = 0f;
+        int half = startAreaSize / 2;
+        float originY = -half * roomHeight;
+
+        for (int sx = 0; sx < startAreaSize; sx++)
+        {
+            for (int sy = 0; sy < startAreaSize; sy++)
+            {
+                Vector3 pos = new Vector3(
+                    originX + sx * roomWidth,
+                    originY + sy * roomHeight,
+                    0f
+                );
+
+                GameObject obj = Instantiate(roomPrefab, pos, Quaternion.identity);
+                obj.name = $"Start_{sx}_{sy}";
+                Room r = obj.GetComponent<Room>();
+                r.Index = new Vector2Int(-1000 + sx, -1000 + sy);
+                if (sx > 0) r.SetDirFlag(Room.Directions.LEFT, false);
+                if (sx < startAreaSize - 1) r.SetDirFlag(Room.Directions.RIGHT, false);
+                if (sy > 0) r.SetDirFlag(Room.Directions.BOTTOM, false);
+                if (sy < startAreaSize - 1) r.SetDirFlag(Room.Directions.TOP, false);
+            }
+        }
+    }
+    private void SpawnStartPath()
+    {
+        float pathY = 0f;
+
+        Room prev = null;
+
+        for (int i = 0; i < startPathLength; i++)
+        {
+            float x = (startAreaSize + i) * roomWidth;
+            Vector3 pos = new Vector3(x, pathY, 0f);
+            GameObject obj = Instantiate(roomPrefab, pos, Quaternion.identity);
+            obj.name = $"Path_{i}";
+            Room room = obj.GetComponent<Room>();
+            room.Index = new Vector2Int(-200, i);
+
+            if (prev != null)
+            {
+                prev.SetDirFlag(Room.Directions.RIGHT, false);
+                room.SetDirFlag(Room.Directions.LEFT, false);
+            }
+            else
+            {
+                int mid = startAreaSize / 2;
+                string startCellName = $"Start_{startAreaSize - 1}_{mid}";
+                GameObject startCellObj = GameObject.Find(startCellName);
+                if (startCellObj != null)
+                {
+                    Room startCellRoom = startCellObj.GetComponent<Room>();
+                    if (startCellRoom != null)
+                    {
+                        startCellRoom.SetDirFlag(Room.Directions.RIGHT, false);
+                        room.SetDirFlag(Room.Directions.LEFT, false);
+                    }
+                }
+                else
+                {
+                    room.SetDirFlag(Room.Directions.LEFT, false);
+                }
+            }
+
+            prev = room;
+            startPathRooms.Add(room);
+        }
     }
 
     private void InitializeRooms()
     {
+        float offsetX = (startAreaSize + startPathLength) * roomWidth;
+
         rooms = new Room[numX, numY];
-        GetRoomSize();
 
         for (int i = 0; i < numX; i++)
         {
@@ -88,7 +168,7 @@ public class GenerateMaze : MonoBehaviour
             {
                 GameObject room = Instantiate(
                     roomPrefab,
-                    new Vector3(i * roomWidth, j * roomHeight, 0),
+                    new Vector3(offsetX + i * roomWidth, j * roomHeight, 0),
                     Quaternion.identity
                 );
                 room.name = $"Room_{i}_{j}";
@@ -116,12 +196,13 @@ public class GenerateMaze : MonoBehaviour
 
     private void SetCamera()
     {
-        Camera.main.transform.position = new Vector3(
-            numX * (roomWidth - 1) / 2,
-            numY * (roomHeight - 1) / 2,
-            -100.0f);
-        float min_value = Mathf.Min(numX * (roomWidth - 1), numY * (roomHeight - 1));
-        Camera.main.orthographicSize = min_value * 0.75f;
+        float centerX = (startAreaSize + startPathLength) * roomWidth + (numX * roomWidth) / 2f - roomWidth / 2f;
+        float centerY = (numY * roomHeight) / 2f - roomHeight / 2f;
+
+        Camera.main.transform.position = new Vector3(centerX, centerY, -100.0f);
+
+        float min_value = Mathf.Min((startAreaSize + startPathLength + numX) * roomWidth, numY * roomHeight);
+        Camera.main.orthographicSize = min_value * 0.5f;
     }
 
     private int GetIndex(int x, int y) => y * numX + x;
@@ -144,6 +225,9 @@ public class GenerateMaze : MonoBehaviour
     {
         ResetRooms();
         GenerateMazeWithKruskal();
+        if (startPathRooms.Count > 0)
+            startPathRooms[startPathRooms.Count - 1].SetDirFlag(Room.Directions.RIGHT, false);
+        rooms[0, 0].SetDirFlag(Room.Directions.LEFT, false);
     }
 
     private void GenerateMazeWithKruskal()
@@ -178,7 +262,6 @@ public class GenerateMaze : MonoBehaviour
             }
         }
 
-        RemoveWall(new Vector2Int(0, 0), Room.Directions.BOTTOM);
         RemoveWall(new Vector2Int(numX - 1, numY - 1), Room.Directions.RIGHT);
     }
 
@@ -222,16 +305,27 @@ public class GenerateMaze : MonoBehaviour
         }
     }
 
+    private void MovePlayerToStartCenter()
+    {
+        GameObject player = GameObject.FindWithTag("Player");
+        if (player == null) return;
+        float centerX = ((startAreaSize - 1) / 2f) * roomWidth;
+        float centerY = 0f;
+
+        player.transform.position = new Vector3(centerX, centerY, player.transform.position.z);
+    }
+
     private void AddExitTrigger()
     {
         GameObject exit = new GameObject("ExitTrigger");
         BoxCollider2D col = exit.AddComponent<BoxCollider2D>();
         col.isTrigger = true;
 
-        exit.transform.position = rooms[numX - 1, numY - 1].transform.position;
-        exit.transform.localScale = new Vector3(roomWidth * 1.2f, roomHeight * 1.2f, 1); 
+        Vector3 lastRoomPos = rooms[numX - 1, numY - 1].transform.position;
+        exit.transform.position = lastRoomPos + new Vector3(roomWidth, 0f, 0f);
+        exit.transform.localScale = new Vector3(roomWidth * 1.2f, roomHeight * 1.2f, 1);
 
-        exit.AddComponent<ExitTrigger>(); 
+        exit.AddComponent<ExitTrigger>();
         Debug.Log("ExitTrigger created at: " + exit.transform.position);
     }
 }

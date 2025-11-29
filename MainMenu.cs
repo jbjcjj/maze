@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
-using TMPro; // nhớ import TextMeshPro
+using TMPro; 
 
 public class MainMenu : MonoBehaviour
 {
