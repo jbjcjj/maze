@@ -41,3 +41,4 @@ public class Player : MonoBehaviour
         Debug.Log($"Player collided with: {collision.gameObject.name} (layer {LayerMask.LayerToName(collision.gameObject.layer)})");
     }
 }
+
