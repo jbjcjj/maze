@@ -358,12 +358,6 @@ public class GenerateMaze : MonoBehaviour
         if (other.x >= 0 && other.x < numX && other.y >= 0 && other.y < numY)
             rooms[other.x, other.y].SetDirFlag(opposite, false);
     }
-    //  NHẤN SPACE ĐỂ GỬI TẠO MAZE MỚI
-    private void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.Space))
-            CreateMaze();
-    }-
     //  ĐƯA NGƯỜI CHƠI VỀ GIỮA VÙNG START
     private void MovePlayerToStartCenter()
     {
@@ -400,3 +394,4 @@ public class GenerateMaze : MonoBehaviour
         Debug.Log("ExitTrigger created at: " + exit.transform.position);
     }
 }
+
